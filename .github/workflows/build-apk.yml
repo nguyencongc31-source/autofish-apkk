@@ -1,0 +1,863 @@
+# ============================================================================
+# 1-FILE CLOUD APK BUILDER (PT AUTOFISH PRO)
+# Chỉ cần tạo 1 file duy nhất tại: .github/workflows/build-apk.yml
+# Hệ thống sẽ tự động khởi tạo toàn bộ Project Android và xuất file .APK!
+# ============================================================================
+
+name: Build Standalone Play Together AutoFish APK
+
+on:
+  push:
+    branches: [ "main", "master" ]
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: 1. Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: 2. Setup JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: 3. Tự động tạo cấu trúc Project Android & Nhúng Tọa Độ
+        shell: bash
+        run: |
+          mkdir -p app/src/main/java/com/kaia/autofish/standalone
+          mkdir -p app/src/main/res/xml
+
+          cat << 'EOF' > gradle.properties
+          org.gradle.jvmargs=-Xmx2048m -Dfile.encoding=UTF-8
+          android.useAndroidX=true
+          kotlin.code.style=official
+          EOF
+
+          cat << 'EOF' > settings.gradle.kts
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = "PTAutoFishStandalone"
+          include(":app")
+          EOF
+
+          cat << 'EOF' > build.gradle.kts
+          plugins {
+              id("com.android.application") version "8.2.2" apply false
+              id("org.jetbrains.kotlin.android") version "1.9.22" apply false
+          }
+          EOF
+
+          cat << 'EOF' > app/build.gradle.kts
+          plugins {
+              id("com.android.application")
+              id("org.jetbrains.kotlin.android")
+          }
+          android {
+              namespace = "com.kaia.autofish.standalone"
+              compileSdk = 34
+              defaultConfig {
+                  applicationId = "com.kaia.autofish.standalone"
+                  minSdk = 26
+                  targetSdk = 34
+                  versionCode = 1
+                  versionName = "2.5"
+              }
+              compileOptions {
+                  sourceCompatibility = JavaVersion.VERSION_17
+                  targetCompatibility = JavaVersion.VERSION_17
+              }
+              kotlinOptions {
+                  jvmTarget = "17"
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/res/xml/accessibility_config.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <accessibility-service xmlns:android="http://schemas.android.com/apk/res/android"
+              android:accessibilityEventTypes="typeAllMask"
+              android:accessibilityFeedbackType="feedbackGeneric"
+              android:canPerformGestures="true"
+              android:canRetrieveWindowContent="false"
+              android:notificationTimeout="50" />
+          EOF
+
+          cat << 'EOF' > app/src/main/AndroidManifest.xml
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+          
+              <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+              <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PROJECTION" />
+          
+              <application
+                  android:label="PT AutoFish Pro"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar">
+          
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true"
+                      android:screenOrientation="sensorLandscape">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN" />
+                          <category android:name="android.intent.category.LAUNCHER" />
+                      </intent-filter>
+                  </activity>
+          
+                  <service
+                      android:name=".AutoFishService"
+                      android:exported="true"
+                      android:foregroundServiceType="mediaProjection"
+                      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+                      <intent-filter>
+                          <action android:name="android.accessibilityservice.AccessibilityService" />
+                      </intent-filter>
+                      <meta-data
+                          android:name="android.accessibilityservice"
+                          android:resource="@xml/accessibility_config" />
+                  </service>
+          
+              </application>
+          </manifest>
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/kaia/autofish/standalone/MainActivity.kt
+          package com.kaia.autofish.standalone
+          
+          import android.app.Activity
+          import android.content.Context
+          import android.content.Intent
+          import android.graphics.Color
+          import android.media.projection.MediaProjectionManager
+          import android.net.Uri
+          import android.os.Bundle
+          import android.provider.Settings
+          import android.widget.Button
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
+          
+          class MainActivity : Activity() {
+          
+              private val REQ_MEDIA_PROJECTION = 1001
+          
+              override fun onCreate(savedInstanceState: Bundle?) {
+                  super.onCreate(savedInstanceState)
+          
+                  val root = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      setBackgroundColor(Color.parseColor("#0B0F19"))
+                      setPadding(56, 72, 56, 72)
+          
+                      val title = TextView(context).apply {
+                          text = "PT AutoFish Pro (Standalone APK)"
+                          textSize = 22f
+                          setTextColor(Color.parseColor("#34D399"))
+                          setPadding(0, 0, 0, 16)
+                      }
+                      addView(title)
+          
+                      val subtitle = TextView(context).apply {
+                          text = "Hoạt động độc lập 100% không cần Macrorify hay Root. Hãy bật đủ 3 bước dưới đây rồi vào game Play Together:"
+                          textSize = 13f
+                          setTextColor(Color.parseColor("#CBD5E1"))
+                          setPadding(0, 0, 0, 36)
+                      }
+                      addView(subtitle)
+          
+                      val btnOverlay = Button(context).apply {
+                          text = "Bước 1: Cấp quyền Vẽ cửa sổ nổi (Overlay)"
+                          setOnClickListener {
+                              if (!Settings.canDrawOverlays(context)) {
+                                  startActivity(Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:$packageName")))
+                              } else {
+                                  Toast.makeText(context, "Đã có quyền Vẽ cửa sổ nổi!", Toast.LENGTH_SHORT).show()
+                              }
+                          }
+                      }
+                      addView(btnOverlay)
+          
+                      val btnAccess = Button(context).apply {
+                          text = "Bước 2: Bật Dịch vụ Tự Chạm (Accessibility)"
+                          setOnClickListener {
+                              startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+                          }
+                      }
+                      addView(btnAccess)
+          
+                      val btnProjection = Button(context).apply {
+                          text = "Bước 3: Bắt đầu Quét Màn Hình & Mở Game"
+                          setOnClickListener {
+                              if (AutoFishService.instance == null) {
+                                  Toast.makeText(context, "Vui lòng bật Bước 2 (Accessibility) trước!", Toast.LENGTH_LONG).show()
+                              } else {
+                                  val mpm = getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                                  startActivityForResult(mpm.createScreenCaptureIntent(), REQ_MEDIA_PROJECTION)
+                              }
+                          }
+                      }
+                      addView(btnProjection)
+                  }
+          
+                  setContentView(root)
+              }
+          
+              override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+                  super.onActivityResult(requestCode, resultCode, data)
+                  if (requestCode == REQ_MEDIA_PROJECTION && resultCode == RESULT_OK && data != null) {
+                      AutoFishService.instance?.startScreenCaptureSession(resultCode, data)
+                      Toast.makeText(this, "Đã kích hoạt bộ quét [!] 60FPS! Hãy mở Play Together.", Toast.LENGTH_LONG).show()
+                      moveTaskToBack(true)
+                  }
+              }
+          }
+          EOF
+
+          cat << 'EOF' > app/src/main/java/com/kaia/autofish/standalone/AutoFishService.kt
+          package com.kaia.autofish.standalone
+          
+          import android.accessibilityservice.AccessibilityService
+          import android.accessibilityservice.GestureDescription
+          import android.app.Notification
+          import android.app.NotificationChannel
+          import android.app.NotificationManager
+          import android.content.Context
+          import android.content.Intent
+          import android.content.SharedPreferences
+          import android.content.pm.ServiceInfo
+          import android.graphics.Bitmap
+          import android.graphics.Color
+          import android.graphics.Path
+          import android.graphics.PixelFormat
+          import android.graphics.drawable.GradientDrawable
+          import android.hardware.display.DisplayManager
+          import android.hardware.display.VirtualDisplay
+          import android.media.ImageReader
+          import android.media.projection.MediaProjection
+          import android.media.projection.MediaProjectionManager
+          import android.os.Build
+          import android.os.Handler
+          import android.os.HandlerThread
+          import android.os.Looper
+          import android.view.Gravity
+          import android.view.MotionEvent
+          import android.view.View
+          import android.view.WindowManager
+          import android.widget.Button
+          import android.widget.FrameLayout
+          import android.widget.LinearLayout
+          import android.widget.TextView
+          import android.widget.Toast
+          import kotlin.math.max
+          import kotlin.math.min
+          import kotlin.random.Random
+          
+          class AutoFishService : AccessibilityService() {
+          
+              companion object {
+                  var instance: AutoFishService? = null
+                  private const val CHANNEL_ID = "PTAutoFishCaptureChannel"
+                  private const val NOTIF_ID = 8801
+              }
+          
+              private lateinit var windowManager: WindowManager
+              private lateinit var prefs: SharedPreferences
+              private val mainHandler = Handler(Looper.getMainLooper())
+          
+              private var floatingBar: LinearLayout? = null
+              private var roiOverlayView: FrameLayout? = null
+              private var roiParams: WindowManager.LayoutParams? = null
+              private var statusLabel: TextView? = null
+          
+              // Danh sách 5 Tâm Chạm Nổi (#1 -> #5) để kéo thả trực tiếp khi vào game
+              private data class TargetPin(
+                  val id: Int,
+                  val name: String,
+                  val colorHex: String,
+                  var x: Int,
+                  var y: Int,
+                  var view: View? = null,
+                  var params: WindowManager.LayoutParams? = null
+              )
+          
+              private val targetPins = mutableListOf<TargetPin>()
+          
+              private var mediaProjection: MediaProjection? = null
+              private var virtualDisplay: VirtualDisplay? = null
+              private var imageReader: ImageReader? = null
+              private var visionThread: HandlerThread? = null
+              private var visionHandler: Handler? = null
+          
+              @Volatile private var isAutoRunning = false
+              @Volatile private var isEditMode = false
+              @Volatile private var isProcessingPull = false
+              @Volatile private var autoRepairEnabled = true
+              private var fishCaughtCount = 0
+          
+              // Tọa độ Khung ROI [!] (Tự động lưu & đọc từ SharedPreferences trong game)
+              private var roiX = 1092
+              private var roiY = 228
+              private var roiW = 216
+              private var roiH = 216
+          
+              private val confidenceThreshold = 78.0f
+              private val delayMinMs = 45L
+              private val delayMaxMs = 110L
+              private val useMorphologyFilter = true
+          
+              override fun onServiceConnected() {
+                  super.onServiceConnected()
+                  instance = this
+                  windowManager = getSystemService(WINDOW_SERVICE) as WindowManager
+                  prefs = getSharedPreferences("PTAutoFishCoords", Context.MODE_PRIVATE)
+          
+                  loadSavedCoordinates()
+                  createRoiOverlayBox()
+                  createDraggableTargetPins()
+                  createFloatingControlBar()
+              }
+          
+              private fun startCaptureForegroundNotification() {
+                  val nm = getSystemService(Context.NOTIFICATION_SERVICE) as NotificationManager
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      val chan = NotificationChannel(CHANNEL_ID, "PT AutoFish Vision Service", NotificationManager.IMPORTANCE_LOW)
+                      nm.createNotificationChannel(chan)
+                  }
+                  val builder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                      Notification.Builder(this, CHANNEL_ID)
+                  } else {
+                      @Suppress("DEPRECATION")
+                      Notification.Builder(this)
+                  }
+                  val notification = builder
+                      .setContentTitle("PT AutoFish Pro")
+                      .setContentText("Đang chạy bộ nhận diện dấu [!] 60FPS")
+                      .setSmallIcon(android.R.drawable.ic_menu_camera)
+                      .build()
+          
+                  if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                      startForeground(NOTIF_ID, notification, ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION)
+                  } else {
+                      startForeground(NOTIF_ID, notification)
+                  }
+              }
+          
+              private fun loadSavedCoordinates() {
+                  roiX = prefs.getInt("roiX", 1092)
+                  roiY = prefs.getInt("roiY", 228)
+                  roiW = prefs.getInt("roiW", 216).coerceIn(90, 500)
+                  roiH = prefs.getInt("roiH", 216).coerceIn(90, 500)
+                  autoRepairEnabled = prefs.getBoolean("autoRepair", true)
+          
+                  targetPins.clear()
+                  targetPins.add(TargetPin(1, "#1 Câu/Giật", "#06B6D4", prefs.getInt("pt1X", 2040), prefs.getInt("pt1Y", 804)))
+                  targetPins.add(TargetPin(2, "#2 Bảo Quản", "#F59E0B", prefs.getInt("pt2X", 1608), prefs.getInt("pt2Y", 888)))
+                  targetPins.add(TargetPin(3, "#3 Mở Balo",  "#A855F7", prefs.getInt("pt3X", 2220), prefs.getInt("pt3Y", 516)))
+                  targetPins.add(TargetPin(4, "#4 Sửa Cần",  "#F43F5E", prefs.getInt("pt4X", 1476), prefs.getInt("pt4Y", 684)))
+                  targetPins.add(TargetPin(5, "#5 Xác Nhận", "#3B82F6", prefs.getInt("pt5X", 1200), prefs.getInt("pt5Y", 720)))
+              }
+          
+              private fun saveCoordinatesToPhone() {
+                  prefs.edit().apply {
+                      putInt("roiX", roiX)
+                      putInt("roiY", roiY)
+                      putInt("roiW", roiW)
+                      putInt("roiH", roiH)
+                      putBoolean("autoRepair", autoRepairEnabled)
+                      targetPins.forEach { pin ->
+                          putInt("pt${pin.id}X", pin.x)
+                          putInt("pt${pin.id}Y", pin.y)
+                      }
+                      apply()
+                  }
+                  Toast.makeText(this, "Đã lưu vị trí ROI & các nút #1->#5!", Toast.LENGTH_SHORT).show()
+              }
+          
+              fun startScreenCaptureSession(resultCode: Int, data: Intent) {
+                  try {
+                      startCaptureForegroundNotification()
+                      val mpm = getSystemService(MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+                      mediaProjection?.stop()
+                      mediaProjection = mpm.getMediaProjection(resultCode, data)
+          
+                      // Bắt buộc trên Android 14+ (API 34): Đăng ký Callback trước khi tạo VirtualDisplay
+                      mediaProjection?.registerCallback(object : MediaProjection.Callback() {
+                          override fun onStop() {
+                              super.onStop()
+                              virtualDisplay?.release()
+                              imageReader?.close()
+                          }
+                      }, mainHandler)
+          
+                      if (visionThread == null) {
+                          visionThread = HandlerThread("PTVision60FPS").apply { start() }
+                          visionHandler = Handler(visionThread!!.looper)
+                      }
+          
+                      val metrics = resources.displayMetrics
+                      val screenW = max(metrics.widthPixels, metrics.heightPixels)
+                      val screenH = min(metrics.metricsWidthOrFallback(screenW), metrics.heightPixels)
+          
+                      imageReader?.close()
+                      imageReader = ImageReader.newInstance(screenW, screenH, PixelFormat.RGBA_8888, 2)
+                      virtualDisplay?.release()
+                      virtualDisplay = mediaProjection?.createVirtualDisplay(
+                          "PTAutoFishCapture",
+                          screenW, screenH, metrics.densityDpi,
+                          DisplayManager.VIRTUAL_DISPLAY_FLAG_AUTO_MIRROR,
+                          imageReader?.surface, null, visionHandler
+                      )
+          
+                      imageReader?.setOnImageAvailableListener({ reader ->
+                          val image = reader.acquireLatestImage() ?: return@setOnImageAvailableListener
+                          try {
+                              if (isAutoRunning && !isProcessingPull && !isEditMode) {
+                                  val plane = image.planes[0]
+                                  val buffer = plane.buffer
+                                  val pixelStride = plane.pixelStride
+                                  val rowStride = plane.rowStride
+                                  val rowPadding = rowStride - pixelStride * image.width
+          
+                                  val bmp = Bitmap.createBitmap(
+                                      image.width + rowPadding / pixelStride,
+                                      image.height,
+                                      Bitmap.Config.ARGB_8888
+                                  )
+                                  bmp.copyPixelsFromBuffer(buffer)
+                                  analyzeRoiFrame(bmp)
+                                  bmp.recycle()
+                              }
+                          } catch (_: Exception) {
+                          } finally {
+                              image.close()
+                          }
+                      }, visionHandler)
+                  } catch (e: Exception) {
+                      Toast.makeText(this, "Lỗi khởi tạo quét màn hình: ${e.message}", Toast.LENGTH_LONG).show()
+                  }
+              }
+          
+              private fun android.util.DisplayMetrics.metricsWidthOrFallback(fallback: Int): Int {
+                  return if (this.widthPixels > 0) this.widthPixels else fallback
+              }
+          
+              private fun createRoiOverlayBox() {
+                  roiParams = WindowManager.LayoutParams(
+                      roiW, roiH,
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                      PixelFormat.TRANSLUCENT
+                  ).apply {
+                      gravity = Gravity.TOP or Gravity.START
+                      x = roiX
+                      y = roiY
+                  }
+          
+                  roiOverlayView = FrameLayout(this).apply {
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#2210B981"))
+                          setStroke(5, Color.parseColor("#10B981"))
+                          cornerRadius = 14f
+                      }
+          
+                      val titleTag = TextView(context).apply {
+                          text = "ROI [!]"
+                          textSize = 10f
+                          setTextColor(Color.parseColor("#10B981"))
+                          setPadding(10, 4, 10, 4)
+                      }
+                      addView(titleTag, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.START))
+          
+                      // Nút kéo giãn kích thước khung ROI (Góc dưới bên phải ↘)
+                      val resizeHandle = TextView(context).apply {
+                          text = "↘"
+                          textSize = 13f
+                          setTextColor(Color.parseColor("#022C22"))
+                          setBackgroundColor(Color.parseColor("#FACC15"))
+                          setPadding(10, 2, 10, 2)
+                          var startW = 0; var startH = 0; var startRawX = 0f; var startRawY = 0f
+                          setOnTouchListener { _, ev ->
+                              when (ev.action) {
+                                  MotionEvent.ACTION_DOWN -> {
+                                      startW = roiW; startH = roiH
+                                      startRawX = ev.rawX; startRawY = ev.rawY
+                                      true
+                                  }
+                                  MotionEvent.ACTION_MOVE -> {
+                                      roiW = (startW + (ev.rawX - startRawX).toInt()).coerceIn(90, 500)
+                                      roiH = (startH + (ev.rawY - startRawY).toInt()).coerceIn(90, 500)
+                                      roiParams?.width = roiW
+                                      roiParams?.height = roiH
+                                      windowManager.updateViewLayout(roiOverlayView, roiParams)
+                                      true
+                                  }
+                                  else -> false
+                              }
+                          }
+                      }
+                      addView(resizeHandle, FrameLayout.LayoutParams(FrameLayout.LayoutParams.WRAP_CONTENT, FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.BOTTOM or Gravity.END))
+          
+                      // Kéo di chuyển cả khung ROI
+                      var initX = 0; var initY = 0; var touchX = 0f; var touchY = 0f
+                      setOnTouchListener { _, event ->
+                          when (event.action) {
+                              MotionEvent.ACTION_DOWN -> {
+                                  initX = roiParams!!.x; initY = roiParams!!.y
+                                  touchX = event.rawX; touchY = event.rawY
+                                  true
+                              }
+                              MotionEvent.ACTION_MOVE -> {
+                                  roiParams!!.x = initX + (event.rawX - touchX).toInt()
+                                  roiParams!!.y = initY + (event.rawY - touchY).toInt()
+                                  roiX = roiParams!!.x; roiY = roiParams!!.y
+                                  windowManager.updateViewLayout(this, roiParams)
+                                  true
+                              }
+                              else -> false
+                          }
+                      }
+                  }
+                  windowManager.addView(roiOverlayView, roiParams)
+              }
+          
+              private fun createDraggableTargetPins() {
+                  val pinSize = 116
+                  targetPins.forEach { pin ->
+                      val pParams = WindowManager.LayoutParams(
+                          pinSize, pinSize,
+                          WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                          WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                          PixelFormat.TRANSLUCENT
+                      ).apply {
+                          gravity = Gravity.TOP or Gravity.START
+                          x = pin.x - pinSize / 2
+                          y = pin.y - pinSize / 2
+                      }
+          
+                      val pinView = FrameLayout(this).apply {
+                          visibility = View.GONE // Chỉ hiện khi người chơi bấm "🎯 CHỈNH NÚT" trong game
+                          background = GradientDrawable().apply {
+                              shape = GradientDrawable.OVAL
+                              setColor(Color.parseColor(pin.colorHex))
+                              setStroke(5, Color.WHITE)
+                          }
+          
+                          val label = TextView(context).apply {
+                              text = pin.name
+                              textSize = 9.5f
+                              gravity = Gravity.CENTER
+                              setTextColor(Color.WHITE)
+                          }
+                          addView(label, FrameLayout.LayoutParams(FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT, Gravity.CENTER))
+          
+                          var ix = 0; var iy = 0; var tx = 0f; var ty = 0f
+                          setOnTouchListener { _, ev ->
+                              when (ev.action) {
+                                  MotionEvent.ACTION_DOWN -> {
+                                      ix = pParams.x; iy = pParams.y
+                                      tx = ev.rawX; ty = ev.rawY
+                                      true
+                                  }
+                                  MotionEvent.ACTION_MOVE -> {
+                                      pParams.x = ix + (ev.rawX - tx).toInt()
+                                      pParams.y = iy + (ev.rawY - ty).toInt()
+                                      pin.x = pParams.x + pinSize / 2
+                                      pin.y = pParams.y + pinSize / 2
+                                      windowManager.updateViewLayout(this, pParams)
+                                      true
+                                  }
+                                  else -> false
+                              }
+                          }
+                      }
+          
+                      pin.view = pinView
+                      pin.params = pParams
+                      windowManager.addView(pinView, pParams)
+                  }
+              }
+          
+              private fun createFloatingControlBar() {
+                  val barParams = WindowManager.LayoutParams(
+                      WindowManager.LayoutParams.WRAP_CONTENT,
+                      WindowManager.LayoutParams.WRAP_CONTENT,
+                      WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                      WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                      PixelFormat.TRANSLUCENT
+                  ).apply {
+                      gravity = Gravity.START or Gravity.CENTER_VERTICAL
+                      x = 18
+                      y = 0
+                  }
+          
+                  floatingBar = LinearLayout(this).apply {
+                      orientation = LinearLayout.VERTICAL
+                      background = GradientDrawable().apply {
+                          setColor(Color.parseColor("#EB090D16"))
+                          setStroke(3, Color.parseColor("#334155"))
+                          cornerRadius = 26f
+                      }
+                      setPadding(18, 18, 18, 18)
+          
+                      // Cho phép kéo di chuyển chính Thanh Điều Khiển Nổi
+                      var bInitX = 0; var bInitY = 0; var bTouchX = 0f; var bTouchY = 0f
+                      statusLabel = TextView(context).apply {
+                          text = "✥ KÉO MENU"
+                          textSize = 10.5f
+                          setTextColor(Color.parseColor("#34D399"))
+                          setPadding(6, 2, 6, 12)
+                          setOnTouchListener { _, ev ->
+                              when (ev.action) {
+                                  MotionEvent.ACTION_DOWN -> {
+                                      bInitX = barParams.x; bInitY = barParams.y
+                                      bTouchX = ev.rawX; bTouchY = ev.rawY
+                                      true
+                                  }
+                                  MotionEvent.ACTION_MOVE -> {
+                                      barParams.x = bInitX + (ev.rawX - bTouchX).toInt()
+                                      barParams.y = bInitY + (ev.rawY - bTouchY).toInt()
+                                      windowManager.updateViewLayout(floatingBar, barParams)
+                                      true
+                                  }
+                                  else -> false
+                              }
+                          }
+                      }
+                      addView(statusLabel)
+          
+                      // Nút 1: ▶ BẬT AUTO / ⏸ DỪNG
+                      val btnToggleAuto = Button(context).apply {
+                          text = "▶ BẬT AUTO"
+                          textSize = 11.5f
+                          setTextColor(Color.parseColor("#022C22"))
+                          setBackgroundColor(Color.parseColor("#10B981"))
+                      }
+          
+                      // Nút 2: 🎯 CHỈNH NÚT / 💾 LƯU NÚT (Chỉnh trực tiếp trong game!)
+                      val btnEditPins = Button(context).apply {
+                          text = "🎯 CHỈNH NÚT"
+                          textSize = 11f
+                          setTextColor(Color.parseColor("#FDE047"))
+                          setBackgroundColor(Color.parseColor("#1E293B"))
+                      }
+          
+                      btnToggleAuto.setOnClickListener {
+                          isAutoRunning = !isAutoRunning
+                          isProcessingPull = false
+                          if (isAutoRunning && isEditMode) {
+                              // Nếu đang mở chỉnh nút mà bấm Bật Auto -> Tự lưu và ẩn các tâm chạm #1->#5
+                              isEditMode = false
+                              targetPins.forEach { it.view?.visibility = View.GONE }
+                              btnEditPins.text = "🎯 CHỈNH NÚT"
+                              saveCoordinatesToPhone()
+                          }
+                          btnToggleAuto.text = if (isAutoRunning) "⏸ DỪNG" else "▶ BẬT AUTO"
+                          btnToggleAuto.setBackgroundColor(Color.parseColor(if (isAutoRunning) "#EF4444" else "#10B981"))
+                          statusLabel?.text = if (isAutoRunning) "QUÉT [!] (${fishCaughtCount})" else "TẠM DỪNG"
+                      }
+                      addView(btnToggleAuto)
+          
+                      btnEditPins.setOnClickListener {
+                          isEditMode = !isEditMode
+                          if (isEditMode) {
+                              isAutoRunning = false
+                              btnToggleAuto.text = "▶ BẬT AUTO"
+                              btnToggleAuto.setBackgroundColor(Color.parseColor("#10B981"))
+                              roiOverlayView?.visibility = View.VISIBLE
+                              targetPins.forEach { it.view?.visibility = View.VISIBLE }
+                              btnEditPins.text = "💾 LƯU NÚT"
+                              btnEditPins.setBackgroundColor(Color.parseColor("#F59E0B"))
+                              btnEditPins.setTextColor(Color.parseColor("#022C22"))
+                              statusLabel?.text = "KÉO NÚT #1->#5"
+                          } else {
+                              targetPins.forEach { it.view?.visibility = View.GONE }
+                              btnEditPins.text = "🎯 CHỈNH NÚT"
+                              btnEditPins.setBackgroundColor(Color.parseColor("#1E293B"))
+                              btnEditPins.setTextColor(Color.parseColor("#FDE047"))
+                              statusLabel?.text = "ĐÃ LƯU VỊ TRÍ"
+                              saveCoordinatesToPhone()
+                          }
+                      }
+                      addView(btnEditPins)
+          
+                      // Nút 3: Bật/Tắt Tự sửa cần câu ngay trong game
+                      val btnRepairToggle = Button(context).apply {
+                          text = if (autoRepairEnabled) "🔧 Sửa: BẬT" else "🔧 Sửa: TẮT"
+                          textSize = 10f
+                          setOnClickListener {
+                              autoRepairEnabled = !autoRepairEnabled
+                              text = if (autoRepairEnabled) "🔧 Sửa: BẬT" else "🔧 Sửa: TẮT"
+                              saveCoordinatesToPhone()
+                          }
+                      }
+                      addView(btnRepairToggle)
+          
+                      // Nút 4: Ẩn/Hiện Khung xanh ROI [!]
+                      val btnHideRoi = Button(context).apply {
+                          text = "👁️ Khung ROI"
+                          textSize = 10f
+                          setOnClickListener {
+                              roiOverlayView?.visibility = if (roiOverlayView?.visibility == View.VISIBLE) View.GONE else View.VISIBLE
+                          }
+                      }
+                      addView(btnHideRoi)
+                  }
+                  windowManager.addView(floatingBar, barParams)
+              }
+          
+              private fun analyzeRoiFrame(screenBitmap: Bitmap) {
+                  val safeX = roiX.coerceIn(0, max(0, screenBitmap.width - roiW))
+                  val safeY = roiY.coerceIn(0, max(0, screenBitmap.height - roiH))
+                  val safeW = min(roiW, screenBitmap.width - safeX)
+                  val safeH = min(roiH, screenBitmap.height - safeY)
+                  if (safeW <= 20 || safeH <= 20) return
+          
+                  val roiBmp = Bitmap.createBitmap(screenBitmap, safeX, safeY, safeW, safeH)
+          
+                  var redOrangeCount = 0
+                  var whiteBadgeCount = 0
+                  var minX = safeW; var maxX = 0
+                  var minY = safeH; var maxY = 0
+                  val rowRedCounts = IntArray(safeH)
+                  val hsv = FloatArray(3)
+          
+                  for (y in 0 until safeH) {
+                      for (x in 0 until safeW) {
+                          val pixel = roiBmp.getPixel(x, y)
+                          Color.colorToHSV(pixel, hsv)
+                          val h = hsv[0]
+                          val s = hsv[1] * 255f
+                          val v = hsv[2] * 255f
+          
+                          val isExclamationColor = ((h in 0f..40f) || h >= 345f) && s >= 145f && v >= 165f
+                          val isWhiteBadge = s < 32f && v > 215f
+          
+                          if (isExclamationColor) {
+                              redOrangeCount++
+                              rowRedCounts[y]++
+                              if (x < minX) minX = x
+                              if (x > maxX) maxX = x
+                              if (y < minY) minY = y
+                              if (y > maxY) maxY = y
+                          } else if (isWhiteBadge) {
+                              whiteBadgeCount++
+                          }
+                      }
+                  }
+                  roiBmp.recycle()
+          
+                  if (redOrangeCount < 70 || whiteBadgeCount < 180) return
+          
+                  val bboxW = max(1, maxX - minX + 1)
+                  val bboxH = max(1, maxY - minY + 1)
+                  val aspectRatio = bboxH.toFloat() / bboxW.toFloat()
+                  val aspectPassed = aspectRatio in 1.75f..5.5f
+          
+                  var stage = 0
+                  var stemRows = 0; var gapRows = 0; var dotRows = 0
+          
+                  for (ry in minY..maxY) {
+                      val c = rowRedCounts[ry]
+                      when (stage) {
+                          0 -> if (c >= 4) { stage = 1; stemRows++ }
+                          1 -> if (c >= 3) stemRows++ else if (stemRows >= 8) { stage = 2; gapRows++ }
+                          2 -> if (c <= 2) gapRows++ else { stage = 3; dotRows++ }
+                          3 -> if (c >= 3) dotRows++
+                      }
+                  }
+          
+                  val hasStemAndDotGap = (stemRows >= 9 && gapRows in 2..15 && dotRows in 3..20)
+                  if (useMorphologyFilter && (!aspectPassed || !hasStemAndDotGap)) return
+          
+                  val totalScore = min(30f, (redOrangeCount / 250f) * 30f) +
+                                   min(20f, (whiteBadgeCount / 550f) * 20f) +
+                                   (if (aspectPassed) 20f else 0f) +
+                                   (if (hasStemAndDotGap) 30f else 20f)
+          
+                  if (totalScore >= confidenceThreshold) {
+                      isProcessingPull = true
+                      mainHandler.post { triggerPullAndStoreCycle() }
+                  }
+              }
+          
+              private fun performHumanTapPin(pinId: Int) {
+                  val pin = targetPins.find { it.id == pinId } ?: return
+                  val jitterX = (pin.x + Random.nextInt(-8, 9)).toFloat().coerceAtLeast(1f)
+                  val jitterY = (pin.y + Random.nextInt(-8, 9)).toFloat().coerceAtLeast(1f)
+                  val clickPath = Path().apply { moveTo(jitterX, jitterY) }
+                  val stroke = GestureDescription.StrokeDescription(clickPath, 0L, Random.nextLong(45L, 85L))
+                  val gesture = GestureDescription.Builder().addStroke(stroke).build()
+                  dispatchGesture(gesture, null, null)
+              }
+          
+              private fun triggerPullAndStoreCycle() {
+                  val humanDelay = Random.nextLong(delayMinMs, delayMaxMs)
+                  statusLabel?.text = "CẮN CÂU [!]"
+          
+                  mainHandler.postDelayed({
+                      // Chạm tâm #1 (Giật cần)
+                      performHumanTapPin(1)
+                      fishCaughtCount++
+          
+                      mainHandler.postDelayed({
+                          // Chạm tâm #2 (Bảo quản cá)
+                          performHumanTapPin(2)
+                          statusLabel?.text = "GIỮ CÁ #${fishCaughtCount}"
+          
+                          mainHandler.postDelayed({
+                              if (autoRepairEnabled && fishCaughtCount % 15 == 0) {
+                                  statusLabel?.text = "ĐANG SỬA CẦN..."
+                                  performHumanTapPin(3) // #3 Mở Balo
+                                  mainHandler.postDelayed({ performHumanTapPin(4) }, 850L)  // #4 Nút Sửa
+                                  mainHandler.postDelayed({ performHumanTapPin(5) }, 1700L) // #5 Xác nhận
+                                  mainHandler.postDelayed({ recastAndResume() }, 2700L)
+                              } else {
+                                  recastAndResume()
+                              }
+                          }, 1200L)
+                      }, 4100L)
+                  }, humanDelay)
+              }
+          
+              private fun recastAndResume() {
+                  performHumanTapPin(1) // #1 Quăng cần lại
+                  mainHandler.postDelayed({
+                      if (isAutoRunning) {
+                          statusLabel?.text = "QUÉT [!] (${fishCaughtCount})"
+                          isProcessingPull = false
+                      }
+                  }, 1800L)
+              }
+          
+              override fun onInterrupt() {}
+          }
+          EOF
+
+      - name: 4. Cài đặt Gradle 8.5 & Biên dịch File .APK
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.5'
+
+      - name: 5. Đóng gói bản cài đặt app-debug.apk
+        run: gradle assembleDebug
+
+      - name: 6. Tải File Cài Đặt .APK Lên Mục Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: PT-AutoFish-Standalone-APK
+          path: app/build/outputs/apk/debug/app-debug.apk
